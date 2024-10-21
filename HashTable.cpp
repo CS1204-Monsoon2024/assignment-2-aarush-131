@@ -2,143 +2,127 @@
 #include <vector>
 #include <cmath>
 
-// Helper function to check if a number is prime
-bool isPrime(int n) {
-    if (n <= 1) return false;
-    if (n <= 3) return true;
-    if (n % 2 == 0 || n % 3 == 0) return false;
-    for (int i = 5; i * i <= n; i += 6) {
-        if (n % i == 0 || n % (i + 2) == 0)
-            return false;
-    }
-    return true;
-}
-
-// Helper function to find the next prime number greater than or equal to n
-int nextPrime(int n) {
-    while (!isPrime(n)) {
-        ++n;
-    }
-    return n;
-}
-
 class HashTable {
 private:
-    std::vector<int> table;
-    std::vector<bool> occupied;
-    int tableSize;
-    int count;
-    const double loadFactorThreshold = 0.8;
+    std::vector<int> table;     
+    int size;                   
+    int count;                 
+    int EMPTY;            
+    int DELETED;          
+    double loadFactorThreshold; 
+
+    // Function to calculate the next prime number >= n
+    int nextPrime(int n) {
+        while (!isPrime(n)) {
+            n++;
+        }
+        return n;
+    }
+
+    // Check if a number is prime
+    bool isPrime(int n) {
+        if (n <= 1) return false;
+        if (n == 2 || n == 3) return true;
+        if (n % 2 == 0 || n % 3 == 0) return false;
+        for (int i = 5; i * i <= n; i += 6) {
+            if (n % i == 0 || n % (i + 2) == 0) return false;
+        }
+        return true;
+    }
 
     // Hash function
-    int hash(int key) {
-        return key % tableSize;
+    int hashFunction(int key) {
+        return key % size;
     }
 
-    // Quadratic probing function
-    int probe(int key) {
-        int index = hash(key);
-        for (int i = 0; i < tableSize; ++i) {
-            int newIndex = (index + i * i) % tableSize;
-            if (!occupied[newIndex] || table[newIndex] == key) {
-                return newIndex;
-            }
-        }
-        return -1; // Indicates that probing failed
-    }
-
-    // Resize function to maintain load factor
+    // Resizing the hash table 
     void resize() {
-        int oldSize = tableSize;
-        tableSize = nextPrime(2 * tableSize);
+        int oldSize = size;
         std::vector<int> oldTable = table;
-        std::vector<bool> oldOccupied = occupied;
 
-        table = std::vector<int>(tableSize, -1);
-        occupied = std::vector<bool>(tableSize, false);
+        // Resize the table to a new prime size
+        size = nextPrime(2 * oldSize);
+        table = std::vector<int>(size, EMPTY);
         count = 0;
 
-        for (int i = 0; i < oldSize; ++i) {
-            if (oldOccupied[i]) {
+    
+        for (int i = 0; i < oldSize; i++) {
+            if (oldTable[i] != EMPTY && oldTable[i] != DELETED) {
                 insert(oldTable[i]);
             }
         }
     }
 
 public:
-    // Constructor
-    HashTable(int size) : tableSize(nextPrime(size)), count(0) {
-        table = std::vector<int>(tableSize, -1);
-        occupied = std::vector<bool>(tableSize, false);
+    HashTable(int initialSize)
+        : EMPTY(-1), DELETED(-2), loadFactorThreshold(0.8) { 
+        size = nextPrime(initialSize);  
+        table = std::vector<int>(size, EMPTY);  
+        count = 0;  // No elements are inserted 
     }
 
     // Insert function
     void insert(int key) {
-        if (count >= loadFactorThreshold * tableSize) {
+        if ((double)count / size > loadFactorThreshold) {
             resize();
         }
 
-        int index = probe(key);
-        if (index == -1) {
-            std::cout << "Max probing limit reached!" << std::endl;
-            return;
+        int idx = hashFunction(key);
+        int i = 0;
+
+        // Quadratic probing
+        while (table[(idx + i * i) % size] != EMPTY && table[(idx + i * i) % size] != DELETED) {
+            if (table[(idx + i * i) % size] == key) {
+                std::cout << "Duplicate key insertion is not allowed" << std::endl;
+                return;
+            }
+            i++;
+            if (i == size / 2 + 1) {
+                std::cout << "Max probing limit reached!" << std::endl;
+                return;
+            }
         }
 
-        if (occupied[index] && table[index] == key) {
-            std::cout << "Duplicate key insertion is not allowed" << std::endl;
-            return;
-        }
-
-        table[index] = key;
-        occupied[index] = true;
-        ++count;
-    }
-
-    // Remove function
-    void remove(int key) {
-        int index = search(key);
-        if (index == -1) {
-            std::cout << "Element not found" << std::endl;
-            return;
-        }
-
-        table[index] = -1;
-        occupied[index] = false;
-        --count;
-
-        // Rehashing elements in the cluster after deletion
-        for (int i = 1; i < tableSize; ++i) {
-            int newIndex = (index + i * i) % tableSize;
-            if (!occupied[newIndex]) break;
-
-            int rehashKey = table[newIndex];
-            table[newIndex] = -1;
-            occupied[newIndex] = false;
-            --count;
-            insert(rehashKey);
-        }
+        table[(idx + i * i) % size] = key;
+        count++;
     }
 
     // Search function
     int search(int key) {
-        int index = hash(key);
-        for (int i = 0; i < tableSize; ++i) {
-            int newIndex = (index + i * i) % tableSize;
-            if (!occupied[newIndex]) return -1; // Key not found
-            if (occupied[newIndex] && table[newIndex] == key) {
-                return newIndex;
+        int idx = hashFunction(key);
+        int i = 0;
+
+        // Quadratic probing for search
+        while (table[(idx + i * i) % size] != EMPTY) {
+            if (table[(idx + i * i) % size] == key) {
+                return (idx + i * i) % size;
+            }
+            i++;
+            if (i == size / 2 + 1) {
+                break;
             }
         }
-        return -1; // Key not found
+        return -1;  // Not found
     }
 
-    // Print function
+    // Remove function
+    void remove(int key) {
+        int idx = search(key);
+        if (idx == -1) {
+            std::cout << "Element not found" << std::endl;
+            return;
+        }
+        table[idx] = DELETED;
+        count--;
+    }
+
+    // Print the hash table
     void printTable() {
-        for (int i = 0; i < tableSize; ++i) {
-            if (occupied[i]) {
-                std::cout << table[i] << " ";
-            } else {
+        for (int i = 0; i < size; i++) {
+            if (table[i] == EMPTY || table[i] == DELETED) {
                 std::cout << "- ";
+            } else {
+                std::cout << table[i] << " ";
             }
         }
         std::cout << std::endl;
